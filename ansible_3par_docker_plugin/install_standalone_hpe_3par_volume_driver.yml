@@ -21,6 +21,9 @@
     include_vars: 'properties/plugin_configuration_properties.yml'
 
   - name: Install prerequistes
+    include: tasks/install_prerequisites_on_all.yml
+
+  - name: Install prerequistes
     include: tasks/install_prerequisites.yml
 
   - name: Install packages on Ubuntu
@@ -49,6 +52,16 @@
       dest: /etc/multipath.conf
     when: ansible_distribution == 'CentOS' or ansible_distribution == 'RedHat'
     become: yes
+
+  - name: Rebuild the initrd, otherwise the system may not boot anymore
+    shell: dracut --force --add multipath
+    become: yes
+    when: ansible_distribution == 'SLES'
+
+  - name: Create multipath file for SLES
+    shell: multipath -t > /etc/multipath.conf
+    become: yes
+    when: ansible_distribution == 'SLES'
 
   - name: Change MountFlags
     ini_file:
@@ -92,7 +105,8 @@
     with_items:
       - iscsid
       - multipathd
-    when: ansible_distribution == 'CentOS' or ansible_distribution == 'RedHat'
+    when: ansible_distribution == 'CentOS' or ansible_distribution == 'RedHat' or ansible_distribution == 'SLES'
+
     become: yes
 
   - name: load etcd settings
@@ -105,9 +119,9 @@
       state: started
       detach: true
       ports:
-        - "23800:23800"
-        - "23790:23790"
-        - "40010:40010"
+        - "{{ etcd_peer_port }}:{{ etcd_peer_port }}"
+        - "{{ etcd_client_port_1 }}:{{ etcd_client_port_1 }}"
+        - "{{ etcd_client_port_2 }}:{{ etcd_client_port_2 }}"
       env:
         ETCD_NAME: etcd0
         ETCD_ADVERTISE_CLIENT_URLS: "{{ etcd_advertise_client_url_1 }},{{ etcd_advertise_client_url_2 }}"
