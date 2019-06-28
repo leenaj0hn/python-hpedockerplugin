@@ -17,9 +17,9 @@ from os import sys
 import random
 import logging
 import time
-from time import time
+from time import time, sleep
 from datetime import timedelta
-import commands
+import subprocess 
 import docker
 
 
@@ -39,6 +39,10 @@ totalActions_create_snapshot = 0
 totalActions_delete_snapshot = 0
 totalActions_mount_snapshot = 0
 totalActions_unmount_snapshot = 0
+totalActions_create_share = 0
+totalActions_delete_share = 0
+totalActions_mount_share = 0
+totalActions_unmount_share = 0
 
 totalErrors = 0
 totalErrors_create_volume = 0
@@ -49,11 +53,16 @@ totalErrors_create_snapshot = 0
 totalErrors_delete_snapshot = 0
 totalErrors_mount_snapshot = 0
 totalErrors_unmount_snapshot = 0
+totalErrors_create_share = 0
+totalErrors_delete_share = 0
+totalErrors_mount_share = 0
+totalErrors_unmount_share = 0
 
 clock_start = time()
 
 volumeCount=0
 snapshotCount=0
+shareCount=0
 
 waitTimeInMinutes = 5
 
@@ -72,13 +81,14 @@ args = parser.parse_args()
 def prompt_for_arg(arg, field, prompt, default):
     if getattr(arg, field) is None:
         try:
-            r = raw_input(prompt)
+            r = input(prompt)
             if len(r) > 0:
                 setattr(arg, field, r)
             else:
                 setattr(arg, field, default)
-        except:
-            print "Aborted."
+        except Exception as ex:
+            print ('%s' % ex)
+            print ("Aborted.")
             sys.exit()
 
 prompt_for_arg(args, "maxVolumes", "Max number of volumes to create (8): ", "8")
@@ -140,6 +150,10 @@ def LogMessage(msg="",actionIncrement=0,action=None):
     global totalActions_delete_snapshot
     global totalActions_mount_snapshot
     global totalActions_unmount_snapshot
+    global totalActions_create_share
+    global totalActions_delete_share
+    global totalActions_mount_share
+    global totalActions_unmount_share
 
     totalActions += actionIncrement
 
@@ -163,9 +177,19 @@ def LogMessage(msg="",actionIncrement=0,action=None):
         totalActions_mount_snapshot += actionIncrement
     elif action and action == "unmount_snapshot":
         totalActions_unmount_snapshot += actionIncrement
+    elif action and action == "create_share":
+        totalActions_create_share += actionIncrement
+    elif action and action == "delete_share":
+        totalActions_delete_share += actionIncrement
+    elif action and action == "mount_share":
+        totalActions_mount_share += actionIncrement
+    elif action and action == "unmount_share":
+        totalActions_unmount_share += actionIncrement
+
+
 
     if msg == "break out wait after 15 minutes...":
-        dump = commands.getstatusoutput('top -bn1')
+        dump = subprocess.getstatusoutput('top -bn1')
         entry = "[A:%d,E:%d] %s" % (totalActions, totalErrors, dump)
         logger.info(entry)
 
@@ -180,6 +204,10 @@ def LogError(msg="", errorIncrement=1, action=None):
     global totalErrors_delete_snapshot
     global totalErrors_mount_snapshot
     global totalErrors_unmount_snapshot
+    global totalErrors_create_share
+    global totalErrors_delete_share
+    global totalErrors_mount_share
+    global totalErrors_unmount_share
 
     totalErrors += errorIncrement
 
@@ -202,6 +230,14 @@ def LogError(msg="", errorIncrement=1, action=None):
         totalErrors_mount_snapshot += errorIncrement
     elif action and action == "unmount_snapshot":
         totalErrors_unmount_snapshot += errorIncrement
+    elif action and action == "create_share":
+        totalErrors_create_share += errorIncrement
+    elif action and action == "delete_share":
+        totalErrors_delete_share += errorIncrement
+    elif action and action == "mount_share":
+        totalErrors_mount_share += errorIncrement
+    elif action and action == "unmount_share":
+        totalErrors_unmount_share += errorIncrement
 
 # Method for logging test results and test time after performing the different actions
 def TestFinished():
@@ -215,6 +251,10 @@ def TestFinished():
     LogMessage("Test performed %s delete snapshot actions." % totalActions_delete_snapshot)
     LogMessage("Test performed %s mount snapshot actions." % totalActions_mount_snapshot)
     LogMessage("Test performed %s unmount snapshot actions." % totalActions_unmount_snapshot)
+    LogMessage("Test performed %s create share actions." % totalActions_create_share)
+    LogMessage("Test performed %s delete share actions." % totalActions_delete_share)
+    LogMessage("Test performed %s mount share actions." % totalActions_mount_share)
+    LogMessage("Test performed %s unmount share actions." % totalActions_unmount_share)
 
     LogMessage( "Test observed  %s errors." % totalErrors)
     LogMessage( "Test observed  %s create volume errors." % totalErrors_create_volume)
@@ -225,6 +265,10 @@ def TestFinished():
     LogMessage( "Test observed  %s delete snapshot errors." % totalErrors_delete_snapshot)
     LogMessage( "Test observed  %s mount snapshot errors." % totalErrors_mount_snapshot)
     LogMessage( "Test observed  %s unmount snapshot errors." % totalErrors_unmount_snapshot)
+    LogMessage( "Test observed  %s create share errors." % totalErrors_create_share)
+    LogMessage( "Test observed  %s delete share errors." % totalErrors_delete_share)
+    LogMessage( "Test observed  %s mount share errors." % totalErrors_mount_share)
+    LogMessage( "Test observed  %s unmount share errors." % totalErrors_unmount_share)
 
 
     LogMessage( "Total test time: %s" % timedelta(seconds=time()-clock_start))
@@ -253,16 +297,37 @@ class Docker3ParVolumePlugin():
         assert volume.id
         assert volume.name == name
         assert volume.attrs['Driver'] == HPE3PAR
-        assert volume.attrs['Options'] == kwargs
+        #assert volume.attrs['Options'] == kwargs
         get_volume = client.volumes.get(volume.id)
         assert get_volume.name == name
         return volume
+
+    def create_share(self, name, **kwargs):
+        client = docker.from_env(version=TEST_API_VERSION)
+        # Create a share
+        fpgname = self.random_name()
+        param_list = [{'filePersona': '','backend': '3par_file'}]
+        params = random.choice(param_list)
+        share = client.volumes.create(name=name, driver=HPE3PAR,
+                                       labels={'type': 'share'},
+                                       driver_opts=params
+        )
+        sleep(300)
+        return share
+
 
     # method to perform delete volume operation
     def delete_volume(self, volume):
         client = docker.from_env(version=TEST_API_VERSION)
         volume.remove()
         assert volume not in client.volumes.list()
+        return True
+
+    def delete_share(self, share):
+        client = docker.from_env(version=TEST_API_VERSION)
+        share.remove()
+        sleep(60)
+        assert share not in client.volumes.list()
         return True
 
     # method to perform mount operation on volume
@@ -276,6 +341,22 @@ class Docker3ParVolumePlugin():
         container.exec_run("sh -c 'echo \"data\" > /insidecontainer/test'")
         return container
 
+    def mount_share(self, share):
+        client = docker.from_env(version=TEST_API_VERSION)
+        #Client = docker.APIClient(version=TEST_API_VERSION)
+        #host_conf = Client.create_host_config(volume_driver=HPE3PAR, binds=[share.name + ':/insidecontainer']) 
+        container_share = client.containers.run(BUSYBOX, "sh", detach=True,
+                                          tty=True, stdin_open=True,
+                                          volumes=[share.name + ':/insidecontainer'],
+                                          labels={'volume': share.name, 'mount': 'share'}
+        )
+        #container_share = client.containers.get(container_info.get("Id"))
+        #container_share.start()
+
+        container_share.exec_run("sh -c 'echo \"data\" > /insidecontainer/test'")
+        return container_share
+
+
     # method to perform unmount operation on volume and delete containers after performing operation
     def unmount_volume(self, container):
         ExecResult = container.exec_run("cat /insidecontainer/test")
@@ -285,6 +366,16 @@ class Docker3ParVolumePlugin():
         assert container.wait()['StatusCode'] == 0 or 137
         container.remove()
         return True
+
+    def unmount_share(self, container_share):
+        ExecResult = container_share.exec_run("cat /insidecontainer/test")
+        assert ExecResult.exit_code == 0
+        #assert ExecResult.output == 'data\n'
+        container_share.stop()
+        assert container_share.wait()['StatusCode'] == 0 or 137
+        container_share.remove()
+        return True
+
 
     # method to perform create snapshot operation
     def create_snapshot(self, name, **kwargs):
@@ -330,6 +421,9 @@ class Docker3ParVolumePlugin():
         container.remove()
         return True
 
+    def random_name(self):
+        return u'fpg_{0:x}'.format(random.getrandbits(32))
+
 
 ##### Individual test functions ######################################
 
@@ -349,6 +443,15 @@ def test_create_volume():
         volume = dcv.create_volume(name, size=str(capacity), provisioning=PROVISIONING, cpg=CPG, backend=BACKEND)
 
     return volume
+
+def test_create_share():
+    global shareCount
+    name = "share-%d" % shareCount
+    shareCount += 1
+    LogMessage("==========> Performing create of share: %s <==========" % (name))
+    share = dcv.create_share(name)
+
+    return share
 
 def test_create_snapshot(volume_name):
     global snapshotCount
@@ -373,22 +476,25 @@ LogMessage("Args: %s" % args)
 try:
     client = docker.from_env(version=TEST_API_VERSION)
     dcv = Docker3ParVolumePlugin()
+    import pdb
+    pdb.set_trace()
 
     ######################################################
     # Defining actions and % of time they should be performed (from previous entry to %)
-    # create volume    - 15%
-    # create snapshot  - 12%
-    # mount volume     - 13%
-    # unmount volume   - 13%
-    # mount snapshot   - 10%
-    # unmount snapshot - 10%
-    # delete snapshot  - 12%
-    # delete volume    - 15%
+    # create share     - 35%
+    # delete share     - 35%
+    # mount share      - 15%
+    # unmount share    - 15%
     #######################################################
 
-    actions = [("create_volume", 15),("create_snapshot", 27),("mount_volume", 40),
-               ("unmount_volume", 53), ("mount_snapshot", 63), ("unmount_snapshot", 73),
-               ("delete_snapshot", 85),("delete_volume", 100)]
+    #actions = [("create_volume", 10),("create_snapshot", 18),("mount_volume", 26),
+     #          ("unmount_volume", 34), ("mount_snapshot", 42), ("unmount_snapshot", 50),
+     #          ("delete_snapshot", 58),("delete_volume", 68),("create_share", 76),("delete_share", 84),("mount_share", 92),("unmount_share", 100)]
+
+    
+    actions = [("create_share", 25),("delete_share", 50),("mount_share", 75),("unmount_share", 100)] 
+
+
 
     volumes = []
     volume_list = []
@@ -402,13 +508,13 @@ try:
         action = [action for (action, value) in actions if num <= value][0]
 
         try:
-            if action == "create_volume":
+            if action == "create_share":
                 volumes = client.volumes.list(filters = {'driver':HPE3PAR,
-                                                         'label': 'type=volume'})
+                                                         'label': 'type=share'})
                 if len(volumes) >= args.maxVolumes - 1:
                     continue
                 else:
-                    performed_action= test_create_volume()
+                    performed_action= test_create_share()
                     if performed_action:
                         LogMessage("************Successfully completed %s operation.**************" % action,1,action)
 
@@ -423,6 +529,18 @@ try:
                     if performed_action:
                         LogMessage("************Successfully completed %s operation.************" % action,1,action)
 
+            elif action == "mount_share":
+                volumes = client.volumes.list(filters = {'dangling':True, 'driver':HPE3PAR,
+                                                         'label': 'type=share'})
+                dangling_volumes = len(volumes)
+                if dangling_volumes > 0:
+                    random_volume = volumes[random.randint(0, (dangling_volumes-1))]
+                    LogMessage("==========> Performing mount operation for share: %s <==========" % random_volume.name)
+                    performed_action = dcv.mount_share(random_volume)
+                    if performed_action:
+                        LogMessage("************Successfully completed %s operation.************" % action,1,action)
+
+
             elif action == "unmount_volume":
                 container_list = client.containers.list(all=True,
                                                         filters={'since': ETCD_CONTAINER, 'status': 'running',
@@ -433,6 +551,19 @@ try:
                     performed_action = dcv.unmount_volume(container_list[0])
                     if performed_action:
                         LogMessage("************Successfully completed %s operation.************" % action,1,action)
+
+            elif action == "unmount_share":
+          
+                container_list = client.containers.list(all=True,
+                                                        filters={'since': ETCD_CONTAINER, 'status': 'running',
+                                                                 'label': 'mount=share'})
+                if len(container_list) > 0:
+                    LogMessage("==========> Performing unmount operation for share: %s <==========" % \
+                               container_list[0].labels['volume'] )
+                    performed_action = dcv.unmount_share(container_list[0])
+                    if performed_action:
+                        LogMessage("************Successfully completed %s operation.************" % action,1,action)
+
 
             elif action == "delete_volume":
                 volumes = client.volumes.list(filters={'dangling': True, 'driver':HPE3PAR,
@@ -447,11 +578,29 @@ try:
                                 LogMessage("************Successfully completed %s operation.************" % action,1,action)
                             break
 
+            elif action == "delete_share":
+                volumes = client.volumes.list(filters={'dangling': True, 'driver':HPE3PAR,
+                                                       'label': 'type=share'})
+                dangling_volumes = len(volumes)
+                if dangling_volumes > 0:
+                    random_volume = volumes[random.randint(0, (dangling_volumes-1))]
+                    LogMessage("==========> Performing delete operation for share: %s <==========" % random_volume.name)
+                    performed_action = dcv.delete_share(random_volume)
+                    if performed_action:
+                        LogMessage("************Successfully completed %s operation.************" % action,1,action)
+                    #break
+
+
+
+
                 local_volumes_list = client.volumes.list(filters={'dangling': True, 'driver': 'local'})
                 local_volumes = len(local_volumes_list)
                 if local_volumes > 0:
                     for local in local_volumes_list:
                         dcv.delete_volume(local)
+
+
+
 
             elif action == "create_snapshot":
                 snapshots = client.volumes.list(filters = {'driver':HPE3PAR,
