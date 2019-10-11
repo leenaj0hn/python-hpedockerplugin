@@ -2,7 +2,7 @@
 
 The following guide covers many of the options used for provisioning volumes and volume management within standalone Docker environments as well as Kubernetes/OpenShift environments.
 
-* ### [Using HPE 3PAR Volume Plug-in with Docker](#docker_usage)
+* ### [Using HPE 3PAR Volume Plug-in for Docker - Block Storage](#docker_usage)
   * [Creating a basic HPE 3PAR volume](#basic)
   * [Volume optional parameters](#options)
   * [Creating replicated volume](#replication)
@@ -16,15 +16,17 @@ The following guide covers many of the options used for provisioning volumes and
   * [Enabling compression on volume](#compression)
   * [Enabling file permissions and ownership](#file-permission-owner)
   * [Managing volumes using multiple backends](#multi-array-feature)
+  * [Managing File Shares]
   
 
 * ### [Using HPE 3PAR Volume Plug-in with Kubernetes/OpenShift](#k8_usage)
-  * [Kubernetes/OpenShift Terms](#terms)
+  * [Kubernetes/OpenShift Terms](#k8_terms)
   * [StorageClass Example](#sc)
     * [StorageClass options](#sc_parameters)
   * [Persistent Volume Claim Example](#pvc)
   * [Pod Example](#pod)
   * [Restarting the Containerized HPE 3PAR Volume Plug-in](#restart)
+  * [Managing File Shares]
 
 ---
 
@@ -50,6 +52,7 @@ The following section covers the supported actions for the **HPE 3PAR Volume Plu
   * [Display help on usage](#usage-help)
   * [Display available backends and their status](#backends-status)
   * [Importing legacy volumes as docker volumes](#import-vol)
+ 
 
 If you are using **Kubernetes** or **OpenShift**, please go the [Kubernetes/OpenShift Usage section](#k8_usage).
 
@@ -95,6 +98,8 @@ The **HPE 3PAR Docker Volume Plug-in** supports several optional parameters that
 - **backend** -- backend to be used for the volume creation. (**introduced in plugin version 3.0**)
 
 - **help** -- displays usage help and backend initialization status. (**introduced in plugin version 3.0**)
+
+- **filePersona** -- create and manage a 3PAR file share (uses NFS protocol internally for data path) (**introduced in plugin version 3.2**)
 
 
 >Note: Setting flash-cache to True does not guarantee flash-cache will be used. The backend system
@@ -257,7 +262,7 @@ For details, please see [Creating HPE 3PAR snapshot schedule](create_snapshot_sc
 
 The following section will cover different operations and commands that can be used to familiarize yourself and verify the installation of the HPE 3PAR Volume Plug-in for Docker by provisioning storage using Kubernetes/OpenShift resources like **PersistentVolume**, **PersistentVolumeClaim**, **StorageClass**, **Pods**, etc.
 
-* [Kubernetes/OpenShift Terms](#terms)
+* [Kubernetes/OpenShift Terms](#k8_terms)
 * [StorageClass Example](#sc)
   * [StorageClass options](#sc_parameters)
 * [Persistent Volume Claim Example](#pvc)
